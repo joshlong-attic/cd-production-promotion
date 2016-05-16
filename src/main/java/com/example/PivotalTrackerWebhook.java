@@ -1,6 +1,7 @@
 package com.example;
 
 import com.example.BuildPromotionService.ArtifactorySearchResults.ArtifactorySearchResult.ArtifactorySearchResultProperties;
+import com.example.artifactory.Artifactory;
 import com.example.tracker.Change;
 import com.example.tracker.TrackerActivityEvent;
 import com.example.tracker.TrackerResource;
@@ -72,138 +73,7 @@ import java.util.function.Predicate;
 	curl -X GET -H "X-TrackerToken: $TOKEN" "https://www.pivotaltracker.com/services/v5/projects/$PROJECT_ID/stories/555"
 */
 
-@Target({ElementType.FIELD, ElementType.METHOD,
-		ElementType.PARAMETER, ElementType.TYPE, ElementType.ANNOTATION_TYPE})
-@Retention(RetentionPolicy.RUNTIME)
-@Qualifier
-@interface Artifactory {
-}
 
-
-@Configuration
-class BuildPromotionConfiguration {
-
-	@Bean
-	@Artifactory
-	RestTemplate restTemplate(
-			@Value("${ARTIFACTORY_API_TOKEN_SECRET}") String token) {
-		RestTemplate restTemplate = new RestTemplate();
-		restTemplate.getInterceptors().add((request, body, execution) -> {
-			request.getHeaders().add("X-JFrog-Art-Api", token);
-			return execution.execute(request, body);
-		});
-		return restTemplate;
-	}
-}
-
-@Component
-class BuildPromotionService {
-
-	private Log log = LogFactory.getLog(getClass());
-
-	private final String apiRoot;
-
-	private final RestTemplate artifactoryRestTemplate;
-
-	/**
-	 * Models the JSON returned from our brief interactions with JFrog Artifactory API
-	 */
-	public static class ArtifactorySearchResults {
-
-		public static class ArtifactorySearchResult {
-
-			public String repo, path, name;
-
-			public static class ArtifactorySearchResultProperties {
-				public URI uri;
-				public Map<String, Set<String>> properties = new HashMap<>();
-			}
-		}
-
-		public Set<ArtifactorySearchResult> results = new HashSet<>();
-
-	}
-
-	@Autowired
-	public BuildPromotionService(
-			@Artifactory RestTemplate artifactoryRestTemplate,
-			@Value("${ARTIFACTORY_API_ROOT:cloudnativejava}") String apiRoot) {
-		this.artifactoryRestTemplate = artifactoryRestTemplate;
-		this.apiRoot = apiRoot;
-	}
-
-	/**
-	 * Looks for a build artifact by a commit ID and then adds a property to that artifact.
-	 *
-	 * @param apiRoot
-	 * @param commitId
-	 * @param key
-	 * @param value
-	 * @return
-	 * @throws IOException
-	 */
-	private ArtifactorySearchResultProperties addPropertyToBuildArtifactByCommitId(
-			String apiRoot, String commitId,
-			Predicate<ArtifactorySearchResults.ArtifactorySearchResult> artifactorySearchResultPredicate,
-			String key, String value) throws IOException {
-
-		String api = "https://" + apiRoot + ".artifactoryonline.com/" + apiRoot;
-
-		RestTemplate restTemplate = this.artifactoryRestTemplate;
-
-		String aql = String.format("items.find({ %s : %s }).include(%s, %s, %s)",
-				enquote("@build.vcsRevision"),
-				enquote(commitId),
-				enquote("name"),
-				enquote("path"),
-				enquote("repo"));
-
-		ResponseEntity<ArtifactorySearchResults> responseEntity =
-				restTemplate.postForEntity(api + "/api/search/aql", aql, ArtifactorySearchResults.class);
-
-		Set<ArtifactorySearchResults.ArtifactorySearchResult> results = responseEntity.getBody().results;
-
-		results.forEach(result -> log.info(String.format("name=%s, path=%s, repo=%s", result.name, result.path, result.repo)));
-
-		//Predicate<ArtifactorySearchResults.ArtifactorySearchResult> artifactorySearchResultPredicate =;
-		return results
-				.stream()
-				.filter(artifactorySearchResultPredicate).findFirst()
-				.map(jar -> {
-					String urlOfArtifact = api + "/api/storage/" + jar.repo + "/" + jar.path + "/" + jar.name;
-					log.info(String.format("found %s", urlOfArtifact));
-					restTemplate.put(urlOfArtifact + "?properties={key}={value}", null, key, value);
-					return restTemplate.getForEntity(urlOfArtifact + "?properties",
-							ArtifactorySearchResultProperties.class).getBody();
-				})
-				.orElseThrow(() -> new NoSuchElementException("Couldn't find a .jar artifact."));
-	}
-
-	private static String enquote(String w) {
-		return "\"" + w + "\"";
-	}
-
-	public ArtifactorySearchResultProperties tagBuildWithPivotalTrackerStory(String commitId, Long id) {
-
-		try {
-
-			String k = "pivotalTrackerStory";
-			String v = Long.toString(id);
-
-			log.info(String.format("we want to tag build artifacts commit ID %s with %s = %s", commitId, k, v));
-
-			return this.addPropertyToBuildArtifactByCommitId(
-					apiRoot,
-					commitId,
-					ar -> ar.name.toLowerCase().endsWith(".jar"),
-					k,
-					v);
-
-		} catch (IOException e) {
-			throw new RuntimeException(e);
-		}
-	}
-}
 
 @RestController
 public class PivotalTrackerWebhook {
