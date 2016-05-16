@@ -1,38 +1,42 @@
 package com.example;
 
+import com.example.ArtifactoryTaggingTest.ArtifactorySearchResults.ArtifactorySearchResult;
+import com.example.ArtifactoryTaggingTest.ArtifactorySearchResults.ArtifactorySearchResult.ArtifactorySearchResultProperties;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.junit.Test;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.RestTemplate;
 
 import java.io.IOException;
+import java.net.URI;
+import java.util.*;
 
 // 6591af3b30eaf92a1023649652aa3572f90e899e
 // https://github.com/joshlong/simple-cd-example/commit/6591af3b30eaf92a1023649652aa3572f90e899e
 // https://travis-ci.org/joshlong/simple-cd-example/builds/130271486
 // https://cloudnativejava.artifactoryonline.com/cloudnativejava/webapp/#/builds/micro-microservice/5/1463252948567/json/com.example:micro-microservice:5
 
-// TODO
 public class ArtifactoryTaggingTest {
 
-
-	private final String artifactoryUsername = System.getenv("ARTIFACTORY_USERNAME"),
-			artifactoryApiTokenSecret = System.getenv("ARTIFACTORY_API_TOKEN_SECRET");
+	private Log log = LogFactory.getLog(getClass());
 
 	@Test
 	public void testArtifactoryMetadata() throws Exception {
 
-
-		this.tagBuildWithTrackerNumber(
+		ArtifactorySearchResultProperties artifactorySearchResultProperties = addPropertyToArtifactByCommitId(
 				"cloudnativejava",
-				"libs-staging-local",
-				artifactoryUsername,
-				artifactoryApiTokenSecret,
+				System.getenv("ARTIFACTORY_API_TOKEN_SECRET"),
 				"6591af3b30eaf92a1023649652aa3572f90e899e",
 				"best-baruch?", "@jbaruch"
 		);
+		artifactorySearchResultProperties
+				.properties
+				.entrySet()
+				.forEach(e -> log.info(String.format("%s=%s", e.getKey(), e.getValue())));
 	}
 
-	RestTemplate restTemplate(String apiUsername, String token) {
+	private static RestTemplate restTemplate(String token) {
 		RestTemplate restTemplate = new RestTemplate();
 		restTemplate.getInterceptors().add((request, body, execution) -> {
 			request.getHeaders().add("X-JFrog-Art-Api", token);
@@ -41,14 +45,12 @@ public class ArtifactoryTaggingTest {
 		return restTemplate;
 	}
 
+	private static String enquote(String w) {
+		return "\"" + w + "\"";
+	}
 
-	// step 1: git commit -a -m "[fixes #123] winning."
-	// this triggers PM to change the status. Meanwhile, this *might* also trigger a build
-	// that lands in CF. If it does, then
-	protected void tagBuildWithTrackerNumber(
+	private ArtifactorySearchResultProperties addPropertyToArtifactByCommitId(
 			String apiRoot,
-			String repositoryName,
-			String apiUsername,
 			String apiKey,
 			String commitId,
 			String key,
@@ -56,45 +58,46 @@ public class ArtifactoryTaggingTest {
 
 		String api = "https://" + apiRoot + ".artifactoryonline.com/" + apiRoot;
 
-		RestTemplate restTemplate = this.restTemplate(apiUsername, apiKey);
+		RestTemplate restTemplate = restTemplate(apiKey);
 
-		String searchKey = "\"@build.vcsRevision\"";
-		String searchValue = "\"" + commitId + "\"";
+		String aql = String.format("items.find({ %s : %s }).include(%s, %s, %s)",
+				enquote("@build.vcsRevision"),
+				enquote(commitId),
+				enquote("name"),
+				enquote("path"),
+				enquote("repo"));
 
-		String aql = String.format("items.find({ %s : %s }).include(\"name\", \"path\", \"repo\")",
-				searchKey, searchValue);
-		/*
-			{
-			  "repo" : "libs-staging-local",
-			  "path" : "com/example/micro-microservice/5",
-			  "name" : "micro-microservice-5.pom",
-			  "type" : "file",
-			  "size" : 3656,
-			  "created" : "2016-05-14T19:09:58.536Z",
-			  "created_by" : "admin",
-			  "modified" : "2016-05-14T19:09:58.523Z",
-			  "modified_by" : "admin",
-			  "updated" : "2016-05-14T19:09:58.523Z"
-			},
-		*/
-		//String aql = "items.find({\"vcsRevision\":{\"$eq\":\"" +commitId + "\"}} )";
-		ResponseEntity<String> entity = restTemplate.postForEntity(api + "/api/search/aql", aql, String.class);
-		String body = entity.getBody();
-		System.out.println(body);
-
-		// todo
-		/**
-		 * https://www.jfrog.com/confluence/display/RTF/Artifactory+REST+API
-		 *
-		 * 1: find the artifact info using Git commit ID:
-		 *      POST /api/search/aql
-		 *      BODY:
-		 *          items.find({"@vcs.revision" : "5ac881f0e82ce4c8b49756cc9c60d4ffdd4eab97"}).include("name", "path", "repo")
-		 *
-		 * 2: then update Artifactory build to contain a Pivotal Tracker (project,  story) ID#:
-		 *      http -a admin PUT https://jbaruch.artifactoryonline.com/jbaruch/api/storage/libs-releases-local/org/jfrog/test/multi/2.24/multi-2.24.pom\?properties=pt.issue=SPR-256
-		 */
+		ResponseEntity<ArtifactorySearchResults> responseEntity = restTemplate.postForEntity(api + "/api/search/aql", aql, ArtifactorySearchResults.class);
+		Set<ArtifactorySearchResult> results = responseEntity.getBody().results;
+		results.forEach(result -> log.info(String.format("name=%s, path=%s, repo=%s", result.name, result.path, result.repo)));
+		return results
+				.stream()
+				.filter(ar -> ar.name.toLowerCase().endsWith(".jar")).findFirst()
+				.map(jar -> {
+					String urlOfArtifact = api + "/api/storage/" + jar.repo + "/" + jar.path + "/" + jar.name;
+					log.info(String.format("found %s", urlOfArtifact));
+					restTemplate.put(urlOfArtifact + "?properties={key}={value}", null, key, value);
+					return restTemplate.getForEntity(urlOfArtifact + "?properties",
+							ArtifactorySearchResultProperties.class).getBody();
+				})
+				.orElseThrow(() -> new NoSuchElementException("Couldn't find a .jar artifact."));
 	}
 
-}
 
+	public static class ArtifactorySearchResults {
+
+		public static class ArtifactorySearchResult {
+
+			public String repo, path, name;
+
+			public static class ArtifactorySearchResultProperties {
+
+				public URI uri;
+
+				public Map<String, Set<String>> properties = new HashMap<>();
+			}
+		}
+
+		public Set<ArtifactorySearchResult> results = new HashSet<>();
+	}
+}
