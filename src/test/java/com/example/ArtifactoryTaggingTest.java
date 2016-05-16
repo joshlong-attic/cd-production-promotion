@@ -4,6 +4,7 @@ import com.example.ArtifactoryTaggingTest.ArtifactorySearchResults.ArtifactorySe
 import com.example.ArtifactoryTaggingTest.ArtifactorySearchResults.ArtifactorySearchResult.ArtifactorySearchResultProperties;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.junit.Assert;
 import org.junit.Test;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.RestTemplate;
@@ -24,16 +25,27 @@ public class ArtifactoryTaggingTest {
 	@Test
 	public void testArtifactoryMetadata() throws Exception {
 
-		ArtifactorySearchResultProperties artifactorySearchResultProperties = addPropertyToArtifactByCommitId(
-				"cloudnativejava",
-				System.getenv("ARTIFACTORY_API_TOKEN_SECRET"),
-				"6591af3b30eaf92a1023649652aa3572f90e899e",
-				"best-baruch?", "@jbaruch"
-		);
-		artifactorySearchResultProperties
-				.properties
-				.entrySet()
-				.forEach(e -> log.info(String.format("%s=%s", e.getKey(), e.getValue())));
+		String key = "best-baruch?";
+
+		ArtifactorySearchResultProperties properties =
+				this.addPropertyToArtifactByCommitId(
+					"cloudnativejava",
+					System.getenv("ARTIFACTORY_API_TOKEN_SECRET"),
+					"6591af3b30eaf92a1023649652aa3572f90e899e",
+					key,
+					"@jbaruch"
+				);
+
+		Map.Entry<String, Set<String>> setEntry =
+				properties
+						.properties
+						.entrySet()
+						.stream()
+						.filter(e -> e.getKey().equals(key))
+						.findAny()
+						.get();
+
+		Assert.assertNotNull(setEntry);
 	}
 
 	private static RestTemplate restTemplate(String token) {
