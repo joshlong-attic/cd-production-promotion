@@ -1,5 +1,6 @@
 package com.example;
 
+import com.example.tracker.Change;
 import com.example.tracker.TrackerActivityEvent;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -7,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.RequestEntity;
 import org.springframework.http.ResponseEntity;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
@@ -34,7 +36,29 @@ import java.io.IOException;
  * {@code PUT /api/storage/libs-release-local/ch/qos/logback/logback-classic/0.9.9?properties=os=win,linux|qa=done&recursive=1 }
  */
 
+
+/**
+ * - ill have two webhooks from PT.
+ * - the first when the developer does git commit -a -m “FIXES #1234”
+ * - PT will mark the story as ‘delivered’ and it’ll pass in the  PT # and the commit ID then in the web hook as a comment
+ * - later, after product management has clicked around and ‘accepted’ the change, she’ll click ‘Deliver’ in PT. Ill have the PT# there.
+ * - but not the commit ID
+ * - so i want to be able to use the PT# to find in Artifactory the latest build
+ *
+ */
+
 // TODO make it so that whe we get an activity update for something being delivered, we correllate
+
+
+/*
+	<groupId>com.example</groupId>
+	<artifactId>micro-microservice</artifactId>
+
+	export TOKEN='your Pivotal Tracker API token'
+	export PROJECT_ID=1378566 (My Sample Project)
+	curl -X GET -H "X-TrackerToken: $TOKEN" "https://www.pivotaltracker.com/services/v5/projects/$PROJECT_ID/stories/555"
+*/
+
 
 @RestController
 public class PivotalTrackerWebhook {
@@ -51,12 +75,24 @@ public class PivotalTrackerWebhook {
 			value = "/activity",
 			consumes = MediaType.APPLICATION_JSON_VALUE)
 	ResponseEntity<?> onActivity(RequestEntity<TrackerActivityEvent> requestEntity) throws IOException {
-		TrackerActivityEvent body = requestEntity.getBody();
-		log.info("event: " + body);
-		if (body != null) {
 
+		TrackerActivityEvent body = requestEntity.getBody();
+
+		log.info("event: " + body);
+
+		if (body != null) {
 			if (body.getKind().equals("comment_create_activity")) {
-				this.tagBuildWithTrackerNumber(body);
+				if (body.getChanges().size() > 0) {
+					Change next = body.getChanges().iterator().next();
+					if (next != null) {
+						if (next.getNewValues() != null) {
+							String commitId = next.getNewValues().getCommitId();
+							if (StringUtils.hasText(commitId)) {
+								this.tagBuildWithTrackerNumber(body);
+							}
+						}
+					}
+				}
 			}
 
 			if (body.getKind().equals("story_update_activity")) {
@@ -64,6 +100,7 @@ public class PivotalTrackerWebhook {
 					this.promoteAcceptedBuildToProduction(body);
 				}
 			}
+
 		}
 		return ResponseEntity.ok().build();
 	}

@@ -33,23 +33,6 @@ public class ProductionApplication {
 	}
 }
 
-
-
-/*
-export TOKEN='your Pivotal Tracker API token'
-export PROJECT_ID=1378566 (My Sample Project)
-curl -X GET -H "X-TrackerToken: $TOKEN" "https://www.pivotaltracker.com/services/v5/projects/$PROJECT_ID/stories/555"
-*/
-
-
-
-
-
-
-
-
-
-
 /*
 
 "changes": [
