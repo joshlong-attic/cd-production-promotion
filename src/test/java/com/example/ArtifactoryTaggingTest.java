@@ -28,7 +28,7 @@ public class ArtifactoryTaggingTest {
 		String key = "best-baruch?";
 
 		ArtifactorySearchResultProperties properties =
-				this.addPropertyToArtifactByCommitId(
+				this.addPropertyToBuildArtifactByCommitId(
 					"cloudnativejava",
 					System.getenv("ARTIFACTORY_API_TOKEN_SECRET"),
 					"6591af3b30eaf92a1023649652aa3572f90e899e",
@@ -44,7 +44,6 @@ public class ArtifactoryTaggingTest {
 						.filter(e -> e.getKey().equals(key))
 						.findAny()
 						.get();
-
 		Assert.assertNotNull(setEntry);
 	}
 
@@ -61,7 +60,7 @@ public class ArtifactoryTaggingTest {
 		return "\"" + w + "\"";
 	}
 
-	private ArtifactorySearchResultProperties addPropertyToArtifactByCommitId(
+	private ArtifactorySearchResultProperties addPropertyToBuildArtifactByCommitId(
 			String apiRoot,
 			String apiKey,
 			String commitId,
