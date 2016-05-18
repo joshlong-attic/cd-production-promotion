@@ -1,6 +1,7 @@
 package com.example;
 
 import com.example.artifactory.Artifactory;
+import com.example.tracker.Tracker;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -54,15 +55,26 @@ import org.springframework.web.client.RestTemplate;
 public class BuildPromotionConfiguration {
 
 	@Bean
+	@Tracker
+	RestTemplate trackerRestTemplate(
+			@Value("${PIVOTAL_TRACKER_TOKEN_SECRET}") String token) {
+		return authenticatedRestTemplate("X-TrackerToken", token);
+	}
+
+	@Bean
 	@Artifactory
 	RestTemplate restTemplate(
 			@Value("${ARTIFACTORY_API_TOKEN_SECRET}") String token) {
-		RestTemplate restTemplate = new RestTemplate();
-		restTemplate.getInterceptors().add((request, body, execution) -> {
-			request.getHeaders().add("X-JFrog-Art-Api", token);
+		return authenticatedRestTemplate("X-JFrog-Art-Api", token);
+	}
+
+	private RestTemplate authenticatedRestTemplate(String h, String v) {
+		RestTemplate r = new RestTemplate();
+		r.getInterceptors().add((request, body, execution) -> {
+			request.getHeaders().add(h, v);
 			return execution.execute(request, body);
 		});
-		return restTemplate;
+		return r;
 	}
 }
 

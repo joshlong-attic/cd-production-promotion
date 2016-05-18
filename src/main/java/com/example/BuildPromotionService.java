@@ -1,6 +1,8 @@
 package com.example;
 
+import com.example.BuildPromotionService.ArtifactorySearchResults.ArtifactorySearchResult.ArtifactorySearchResultProperties;
 import com.example.artifactory.Artifactory;
+import com.example.tracker.Tracker;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,16 +17,40 @@ import java.util.*;
 import java.util.function.Predicate;
 
 /**
+ * TODO also, we need to make sure that when we cf push, we give each push driveb by a commit a
+ * logical name that maps to that commit ID, eg: $reservation-service-{COMMIT_ID}, so that we can blue/green
+ * deploy *that* specific one when the story is later accepted. We need to build in smarts to not cf push _if_ there
+ * is a newer build already in production.
+ *
  * @author Josh Long
  */
 @Component
 public class BuildPromotionService {
 
-	private Log log = LogFactory.getLog(getClass());
 
-	private final String apiRoot;
+/*
+	private RestTemplate restTemplate = new RestTemplate();
+	private String token = System.getenv("PIVOTAL_TRACKER_TOKEN_SECRET");
+	private String storyId = "98161154";
+	private String projectId = Long.toString(1378566);
+*/
+
+
+	private static Log log = LogFactory.getLog(BuildPromotionService.class);
+
+	private final String artifactoryApiRoot;
 
 	private final RestTemplate artifactoryRestTemplate;
+
+	private final RestTemplate pivotalTrackerRestTemplate;
+
+	public void promoteAcceptedBuildToProduction(String trackerStoryGuid) {
+
+		// TODO the original plan won't work because this webhook is called immediately after commit, long before
+		// TODO CI has build our image for us. So, instead, well simply crawl the comments of the story from
+		// TODO the tracker API. We'll need the Project ID and the X-Tracker token and the story ID.
+	}
+
 
 	/**
 	 * Models the JSON returned from our brief interactions with JFrog Artifactory API
@@ -48,22 +74,15 @@ public class BuildPromotionService {
 	@Autowired
 	public BuildPromotionService(
 			@Artifactory RestTemplate artifactoryRestTemplate,
-			@Value("${ARTIFACTORY_API_ROOT:cloudnativejava}") String apiRoot) {
+			@Tracker RestTemplate pivotalTrackerRestTemplate,
+			@Value("${ARTIFACTORY_API_ROOT:cloudnativejava}") String artifactoryApiRoot) {
 		this.artifactoryRestTemplate = artifactoryRestTemplate;
-		this.apiRoot = apiRoot;
+		this.artifactoryApiRoot = artifactoryApiRoot;
+		this.pivotalTrackerRestTemplate = pivotalTrackerRestTemplate;
 	}
 
-	/**
-	 * Looks for a build artifact by a commit ID and then adds a property to that artifact.
-	 *
-	 * @param apiRoot
-	 * @param commitId
-	 * @param key
-	 * @param value
-	 * @return
-	 * @throws IOException
-	 */
-	private ArtifactorySearchResults.ArtifactorySearchResult.ArtifactorySearchResultProperties addPropertyToBuildArtifactByCommitId(
+	@Deprecated
+	private ArtifactorySearchResultProperties addPropertyToBuildArtifactByCommitId(
 			String apiRoot, String commitId,
 			Predicate<ArtifactorySearchResults.ArtifactorySearchResult> artifactorySearchResultPredicate,
 			String key, String value) throws IOException {
@@ -84,27 +103,32 @@ public class BuildPromotionService {
 
 		Set<ArtifactorySearchResults.ArtifactorySearchResult> results = responseEntity.getBody().results;
 
-		results.forEach(result -> log.info(String.format("name=%s, path=%s, repo=%s", result.name, result.path, result.repo)));
+		results.forEach(result -> log.info(String.format(
+				"name=%s, path=%s, repo=%s", result.name, result.path, result.repo)));
 
-		//Predicate<ArtifactorySearchResults.ArtifactorySearchResult> artifactorySearchResultPredicate =;
 		return results
 				.stream()
-				.filter(artifactorySearchResultPredicate).findFirst()
+				.filter(asr -> {
+					log.info("testing artifactorySearchResult " + asr.toString());
+					return artifactorySearchResultPredicate.test(asr);
+				}).findFirst()
 				.map(jar -> {
-					String urlOfArtifact = api + "/api/storage/" + jar.repo + "/" + jar.path + "/" + jar.name;
+					String urlOfArtifact = String.format("%s/api/storage/%s/%s/%s", api, jar.repo, jar.path, jar.name);
 					log.info(String.format("found %s", urlOfArtifact));
 					restTemplate.put(urlOfArtifact + "?properties={key}={value}", null, key, value);
 					return restTemplate.getForEntity(urlOfArtifact + "?properties",
-							ArtifactorySearchResults.ArtifactorySearchResult.ArtifactorySearchResultProperties.class).getBody();
+							ArtifactorySearchResultProperties.class).getBody();
 				})
 				.orElseThrow(() -> new NoSuchElementException("Couldn't find a .jar artifact."));
 	}
 
+	@Deprecated
 	private static String enquote(String w) {
 		return "\"" + w + "\"";
 	}
 
-	public ArtifactorySearchResults.ArtifactorySearchResult.ArtifactorySearchResultProperties tagBuildWithPivotalTrackerStory(String commitId, Long id) {
+	@Deprecated
+	public ArtifactorySearchResultProperties tagBuildWithPivotalTrackerStory(String commitId, Long id) {
 
 		try {
 
@@ -113,8 +137,8 @@ public class BuildPromotionService {
 
 			log.info(String.format("we want to tag build artifacts commit ID %s with %s = %s", commitId, k, v));
 
-			return this.addPropertyToBuildArtifactByCommitId(
-					apiRoot,
+			return addPropertyToBuildArtifactByCommitId(
+					artifactoryApiRoot,
 					commitId,
 					ar -> ar.name.toLowerCase().endsWith(".jar"),
 					k,
@@ -125,3 +149,4 @@ public class BuildPromotionService {
 		}
 	}
 }
+
