@@ -94,7 +94,7 @@ public class PivotalTrackerWebhook {
 
 		TrackerActivityEvent body = requestEntity.getBody();
 
-		log.info("event: " + body);
+		log.info("/activity webhook called: " + body);
 
 		if (body != null) {
 			if (body.getKind().equals("comment_create_activity")) {
