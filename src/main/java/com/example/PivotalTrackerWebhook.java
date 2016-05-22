@@ -87,6 +87,11 @@ public class PivotalTrackerWebhook {
 		this.buildPromotionService = buildPromotionService;
 	}
 
+	@RequestMapping (method = RequestMethod.GET, value = "/hi")
+	String hi (){
+		return "Hi";
+	}
+
 	@RequestMapping(method = RequestMethod.POST,
 			value = "/activity",
 			consumes = MediaType.APPLICATION_JSON_VALUE)
