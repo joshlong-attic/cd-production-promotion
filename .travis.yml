@@ -1,5 +1,5 @@
 language: java
 jdk:
  - oraclejdk8
-script: ./mvnw package && ./bin/cf.sh && $HOME/bin/cf push
+script: ./mvnw package && ./bin/go.sh
 install: echo installing..
