@@ -1,11 +1,15 @@
 package com.example;
 
 import com.example.artifactory.Artifactory;
+import com.example.bintray.Bintray;
 import com.example.tracker.Tracker;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.util.Base64Utils;
 import org.springframework.web.client.RestTemplate;
+
+import java.nio.charset.Charset;
 
 /***
  * WORKFLOW :
@@ -53,6 +57,19 @@ import org.springframework.web.client.RestTemplate;
 
 @Configuration
 public class BuildPromotionConfiguration {
+
+	@Bean
+	@Bintray
+	RestTemplate bintrayRestTemplate(String user, String pw) {
+		RestTemplate r = new RestTemplate();
+		r.getInterceptors().add((request, body, execution) -> {
+			String token = Base64Utils.encodeToString((user + ":" + pw)
+					.getBytes(Charset.forName("UTF-8")));
+			request.getHeaders().add("Authorization", "Basic " + token);
+			return execution.execute(request, body);
+		});
+		return r;
+	}
 
 	@Bean
 	@Tracker
