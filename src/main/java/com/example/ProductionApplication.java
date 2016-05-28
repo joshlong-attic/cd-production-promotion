@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.RestTemplate;
 
 import java.nio.charset.Charset;
+import java.util.Map;
 
 import static org.springframework.web.bind.annotation.RequestMethod.POST;
 
@@ -61,7 +62,7 @@ class BintrayWebhookRestController {
 	private Log log = LogFactory.getLog(getClass());
 
 	@RequestMapping(method = POST, value = "/bintray-webhook")
-	public void post(RequestEntity<String> re) {
+	public void post(RequestEntity<Map<String, String>> re) {
 		log.info("=========================");
 		log.info("Start");
 		log.info("=========================");
