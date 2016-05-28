@@ -66,7 +66,7 @@ class BintrayWebhookRestController {
 		log.info("=========================");
 		log.info("Start");
 		log.info("=========================");
-		log.info(re.getBody());
+		re.getBody().forEach((name, v) -> log.info(name + '=' + v));
 		log.info("------------------------");
 		log.info(re.getMethod().toString());
 		log.info(re.getUrl());
