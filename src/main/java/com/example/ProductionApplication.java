@@ -123,6 +123,9 @@ class BintrayWebhookRestController {
 
 	private Log log = LogFactory.getLog(getClass());
 
+	// this is registered at
+	// https://cnj-cd-production-promotion.cfapps.io/bintray-webhook
+
 	@RequestMapping(method = POST, value = "/bintray-webhook")
 	public void post(RequestEntity<Map<String, String>> re) {
 		log.info("=========================");
