@@ -62,10 +62,17 @@ class BintrayWebhookRestController {
 
 	@RequestMapping(method = POST, value = "/bintray-webhook")
 	public void post(RequestEntity<String> re) {
-		log.info(re.getMethod().toString());
+		log.info("=========================");
+		log.info("Start");
+		log.info("=========================");
 		log.info(re.getBody());
+		log.info("------------------------");
+		log.info(re.getMethod().toString());
 		log.info(re.getUrl());
 		re.getHeaders().forEach((name, values) -> values.forEach(log::info));
+		log.info("=========================");
+		log.info("End");
+		log.info("=========================");
 	}
 }
 
