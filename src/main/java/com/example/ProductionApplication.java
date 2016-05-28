@@ -82,7 +82,6 @@ public class ProductionApplication {
 
 			if (list.size() == 0) {
 
-				// let's register a webhook
 				// POST /webhooks/:subject/:repo/:package
 
 				String post = urlBuilder.apply("/webhooks/{subject}/{repo}/{package}");
