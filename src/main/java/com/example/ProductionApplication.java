@@ -1,5 +1,7 @@
 package com.example;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
@@ -10,11 +12,12 @@ import org.springframework.http.RequestEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.util.Base64Utils;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.RestTemplate;
 
 import java.nio.charset.Charset;
+
+import static org.springframework.web.bind.annotation.RequestMethod.POST;
 
 
 @SpringBootApplication
@@ -37,7 +40,9 @@ class BuildPromotionConfiguration {
 
 		String token = Base64Utils.encodeToString((user + ":" + pw)
 				.getBytes(Charset.forName("UTF-8")));
+
 		return authenticatedRestTemplate("Authorization", "Basic " + token);
+
 	}
 
 	private RestTemplate authenticatedRestTemplate(String h, String v) {
@@ -50,41 +55,29 @@ class BuildPromotionConfiguration {
 	}
 }
 
-
 @RestController
-@RequestMapping ("/bintray-wh")
 class BintrayWebhookRestController {
 
-	@RequestMapping(method = RequestMethod.POST)
-	public void post(RequestEntity<String> requestEntity) {
-		System.out.println(requestEntity.getMethod().toString());
-		System.out.println(requestEntity.getBody());
-		System.out.println(requestEntity.getUrl());
-		requestEntity.getHeaders().forEach((name, values) -> values.forEach(System.out::println));
+	private Log log = LogFactory.getLog(getClass());
+
+	@RequestMapping(method = POST, value = "/bintray-webhook")
+	public void post(RequestEntity<String> re) {
+		log.info(re.getMethod().toString());
+		log.info(re.getBody());
+		log.info(re.getUrl());
+		re.getHeaders().forEach((name, values) -> values.forEach(log::info));
 	}
 }
 
 @Service
 class BuildPromotionService {
 
-	//		http -a joshlong POST https://api.bintray.com/webhooks/swampup-cloud-native-java/maven/demo/ \
-//		url=$MY_CUSTOM_BINTRAY_WEBHOOK_WHICH_WILL_BE_A_CF_APP_THAT_DOES_BLUE_GREEN_DEPLOY_OF_APP \
-//		method=post
+//	http -a joshlong POST https://api.bintray.com/webhooks/swampup-cloud-native-java/maven/demo/ \
+//	url=$MY_CUSTOM_BINTRAY_WEBHOOK_WHICH_WILL_BE_A_CF_APP_THAT_DOES_BLUE_GREEN_DEPLOY_OF_APP \
+//	method=post
 
 	private final RestTemplate restTemplate;
 
-	/*@PostConstruct
-	public void after() throws Exception {
-		// swampup-cloud-native-java / maven / cdlive
-		String org = "swampup-cloud-native-java ", pkg = "cdlive";
-		String url = "https://api.bintray.com/webhooks/" + org ;
-
-		ResponseEntity<String> entity = this.restTemplate.getForEntity(url, String.class);
-		System.out.println(
-				entity.getBody()
-		);
-	}
-*/
 	@Autowired
 	public BuildPromotionService(RestTemplate restTemplate) {
 		this.restTemplate = restTemplate;
